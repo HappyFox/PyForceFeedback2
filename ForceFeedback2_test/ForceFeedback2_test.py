@@ -2,10 +2,16 @@
 import PyForceFeedback2
 import time
 
-print("init")
-PyForceFeedback2.init()
-print("inited")
+try:
+    print("init")
+    PyForceFeedback2.init()
+    print("inited")
 
-while True:
-    print(PyForceFeedback2.poll())
-    time.sleep(0.5)
+    while True:
+        print("FORCE POLL!!")
+        #breakpoint()
+        #print(PyForceFeedback2.test())
+        print(PyForceFeedback2.poll())
+        time.sleep(0.5)
+finally:
+    PyForceFeedback2.release()

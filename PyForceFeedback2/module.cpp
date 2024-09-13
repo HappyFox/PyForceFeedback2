@@ -14,10 +14,19 @@
 
 #include <stdexcept>
 #include <tuple>
+#include <list>
 #include <strsafe.h>
+#include <iostream>
 
+#include <pybind11/stl.h>
+#include <pybind11/complex.h>
+#include <pybind11/functional.h> 
+#include <pybind11/chrono.h>
 
-//#define DIRECTINPUT_VERSION 0x0800
+#define DIRECTINPUT_VERSION 0x0800
+
+using namespace pybind11::literals;
+namespace py = pybind11;
 
 extern "C" {
     IMAGE_DOS_HEADER __ImageBase;
@@ -33,25 +42,16 @@ LPDIRECTINPUTEFFECT     g_pEffect = NULL;
 HWND hwnd = nullptr;
 
 
+typedef std::tuple <bool, bool, bool, bool, bool, bool, bool, bool> buttons;
+
 struct DI_ENUM_CONTEXT
 {
     DIJOYCONFIG* pPreferredJoyCfg;
     bool bPreferredJoyCfgValid;
 };
 
-struct Pet {
-    Pet(const std::string& name) : name(name) { }
-    void setName(const std::string& name_) { name = name_; }
-    const std::string& getName() const { return name; }
-
-    std::string name;
-};
 
 
-struct JoyState {
-    JoyState(const long x, const long y, const long Rz ) : x(x), y(y), Rz(Rz)  { }
-    const long x,y,Rz;
-};
 
 BOOL CALLBACK EnumJoysticksCallback(const DIDEVICEINSTANCE* pdidInstance,
     VOID* pContext)
@@ -135,10 +135,13 @@ void init() {
 
 }
 
-
-std::tuple<long, long, long, long> poll() {
+std::tuple<long, long, long, long, buttons>poll() {
     HRESULT hr;
     DIJOYSTATE2 js;
+
+    if (NULL == g_pJoystick) {
+        throw std::exception("Not initialized.");
+    }
 
     while (true) {
         hr = g_pJoystick->Poll();
@@ -147,7 +150,7 @@ std::tuple<long, long, long, long> poll() {
             // DInput is telling us that the input stream has been
             // interrupted. We aren't tracking any state between polls, so
             // we don't have any special reset that needs to be done. We
-            // just re-acquire and try again.
+            // just re-acquire and try again.s
             hr = g_pJoystick->Acquire();
             while (hr == DIERR_INPUTLOST)
                 hr = g_pJoystick->Acquire();
@@ -158,12 +161,34 @@ std::tuple<long, long, long, long> poll() {
         if (FAILED(hr = g_pJoystick->GetDeviceState(sizeof(DIJOYSTATE2), &js)))
             continue;
 
-        return { js.lX,js.lY, js.lRz, js.rglSlider[0] };
+        unsigned char pressed = 128;
+
+
+        buttons but = buttons(
+            js.rgbButtons[0] && pressed,
+            js.rgbButtons[1] && pressed,
+            js.rgbButtons[2] && pressed,
+            js.rgbButtons[3] && pressed,
+            js.rgbButtons[4] && pressed,
+            js.rgbButtons[5] && pressed,
+            js.rgbButtons[6] && pressed,
+            js.rgbButtons[7] && pressed
+        );
+
+         return { js.lX,js.lY, js.lRz, js.rglSlider[0], but};
     }
 }
 
+void release() {
+    if (g_pJoystick)
+        g_pJoystick->Unacquire();
 
-namespace py = pybind11;
+    // Release any DirectInput objects.
+    SAFE_RELEASE(g_pEffect);
+    SAFE_RELEASE(g_pJoystick);
+    SAFE_RELEASE(g_pDI);
+}
+
 
 PYBIND11_MODULE(PyForceFeedback2, m) {
     m.def("init", &init, R"pbdoc(
@@ -172,6 +197,11 @@ PYBIND11_MODULE(PyForceFeedback2, m) {
     m.def("poll", &poll, R"pbdoc(
         Poll and return the axis values.
     )pbdoc");
+    m.def("release", &release, R"pbdoc(
+        Release the Joystick.
+    )pbdoc");
+
+
 
 #ifdef VERSION_INFO
     m.attr("__version__") = VERSION_INFO;

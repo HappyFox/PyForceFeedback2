@@ -12,6 +12,9 @@
     <Name>ForceFeedback2_test</Name>
     <RootNamespace>ForceFeedback2_test</RootNamespace>
     <TestFramework>Pytest</TestFramework>
+    <LaunchProvider>Standard Python launcher</LaunchProvider>
+    <InterpreterArguments>-i </InterpreterArguments>
+    <EnableNativeCodeDebugging>True</EnableNativeCodeDebugging>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
     <DebugSymbols>true</DebugSymbols>
