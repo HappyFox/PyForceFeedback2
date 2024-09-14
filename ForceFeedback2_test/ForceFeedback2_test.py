@@ -2,6 +2,8 @@
 import PyForceFeedback2
 import time
 
+#joy = PyForceFeedback2.test()
+
 try:
     print("init")
     PyForceFeedback2.init()

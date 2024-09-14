@@ -25,8 +25,10 @@
 
 #define DIRECTINPUT_VERSION 0x0800
 
+
 using namespace pybind11::literals;
 namespace py = pybind11;
+
 
 extern "C" {
     IMAGE_DOS_HEADER __ImageBase;
@@ -51,6 +53,19 @@ struct DI_ENUM_CONTEXT
 };
 
 
+
+struct _JoyState {
+    _JoyState(
+        const long x, 
+        const long y, 
+        const long Rz, 
+        const long throttle,
+        py::object buttons,
+        py::object pov
+    ) : x(x), y(y), Rz(Rz), throttle(throttle), buttons(buttons), pov(pov) { }
+    const long x, y, Rz, throttle;
+    py::object buttons, pov;
+};
 
 
 BOOL CALLBACK EnumJoysticksCallback(const DIDEVICEINSTANCE* pdidInstance,
@@ -135,7 +150,33 @@ void init() {
 
 }
 
-std::tuple<long, long, long, long, buttons>poll() {
+py::object build_py_joy_state(DIJOYSTATE2 js) {
+    py::object PyForceFeedback2 = py::module::import("PyForceFeedback2");
+    py::object joy_state = PyForceFeedback2.attr("JoyState");
+
+    unsigned char pressed = 128;
+
+    py::tuple buttons = py::make_tuple(
+        (bool)js.rgbButtons[0] && pressed,
+        (bool)js.rgbButtons[1] && pressed,
+        (bool)js.rgbButtons[2] && pressed,
+        (bool)js.rgbButtons[3] && pressed,
+        (bool)js.rgbButtons[4] && pressed,
+        (bool)js.rgbButtons[5] && pressed,
+        (bool)js.rgbButtons[6] && pressed,
+        (bool)js.rgbButtons[7] && pressed
+    );
+
+    py::object pov = py::none();
+    if (!(LOWORD(js.rgdwPOV[0]) == 0xFFFF)) {
+        pov = py::int_(js.rgdwPOV[0]);
+    }
+
+    return joy_state(js.lX, js.lY, js.lRz, js.rglSlider[0], buttons, pov);
+}
+
+//std::tuple<long, long, long, long, buttons>poll() {
+py::object poll(){
     HRESULT hr;
     DIJOYSTATE2 js;
 
@@ -161,23 +202,14 @@ std::tuple<long, long, long, long, buttons>poll() {
         if (FAILED(hr = g_pJoystick->GetDeviceState(sizeof(DIJOYSTATE2), &js)))
             continue;
 
-        unsigned char pressed = 128;
+        return build_py_joy_state(js);
 
-
-        buttons but = buttons(
-            js.rgbButtons[0] && pressed,
-            js.rgbButtons[1] && pressed,
-            js.rgbButtons[2] && pressed,
-            js.rgbButtons[3] && pressed,
-            js.rgbButtons[4] && pressed,
-            js.rgbButtons[5] && pressed,
-            js.rgbButtons[6] && pressed,
-            js.rgbButtons[7] && pressed
-        );
-
-         return { js.lX,js.lY, js.lRz, js.rglSlider[0], but};
+         //return { js.lX,js.lY, js.lRz, js.rglSlider[0], but};
     }
 }
+
+
+
 
 void release() {
     if (g_pJoystick)
@@ -190,7 +222,35 @@ void release() {
 }
 
 
+py::object test() {
+    py::object PyForceFeedback2 = py::module::import("PyForceFeedback2");
+    //m.attr("some_function") = A.attr("some_function");
+    py::object joy_state = PyForceFeedback2.attr("JoyState");
+
+    py::tuple buttons = py::make_tuple(true, false, true);
+    py::int_ pov = py::int_(30000);
+
+    py::object js = joy_state(1, 2, 3, buttons, pov);
+    //return py::cast<joy_state>(_JoyState(1, 2, 3));
+    return js;
+}
+
+
 PYBIND11_MODULE(PyForceFeedback2, m) {
+    py::class_<_JoyState>(m, "JoyState")
+        .def(py::init<const long, const long, const long, const long, py::object, py::object>())
+        .def_readonly("x", &_JoyState::x)
+        .def_readonly("y", &_JoyState::y)
+        .def_readonly("r_z", &_JoyState::Rz)
+        .def_readonly("throttle", &_JoyState::throttle)
+        .def_readonly("buttons", &_JoyState::buttons)
+        .def_readonly("pov", &_JoyState::pov)
+        .def("__repr__",
+            [](const _JoyState& a) {
+
+                return "<JoyState: '" + std::to_string(a.x) + ", " + std::to_string(a.y) +", " + std::to_string(a.Rz) + ", " + std::to_string(a.throttle) + ", " + py::repr(a.buttons).cast<std::string>() + "," + py::repr(a.pov).cast<std::string>() + "'>";
+            });
+
     m.def("init", &init, R"pbdoc(
         Initialize the joystick.
     )pbdoc");
@@ -200,6 +260,8 @@ PYBIND11_MODULE(PyForceFeedback2, m) {
     m.def("release", &release, R"pbdoc(
         Release the Joystick.
     )pbdoc");
+
+    m.def("test", &test);
 
 
 
