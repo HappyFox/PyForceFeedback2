@@ -53,7 +53,6 @@ struct DI_ENUM_CONTEXT
 };
 
 
-
 struct _JoyState {
     _JoyState(
         const long x, 
@@ -175,7 +174,6 @@ py::object build_py_joy_state(DIJOYSTATE2 js) {
     return joy_state(js.lX, js.lY, js.lRz, js.rglSlider[0], buttons, pov);
 }
 
-//std::tuple<long, long, long, long, buttons>poll() {
 py::object poll(){
     HRESULT hr;
     DIJOYSTATE2 js;
@@ -203,8 +201,6 @@ py::object poll(){
             continue;
 
         return build_py_joy_state(js);
-
-         //return { js.lX,js.lY, js.lRz, js.rglSlider[0], but};
     }
 }
 
@@ -219,20 +215,6 @@ void release() {
     SAFE_RELEASE(g_pEffect);
     SAFE_RELEASE(g_pJoystick);
     SAFE_RELEASE(g_pDI);
-}
-
-
-py::object test() {
-    py::object PyForceFeedback2 = py::module::import("PyForceFeedback2");
-    //m.attr("some_function") = A.attr("some_function");
-    py::object joy_state = PyForceFeedback2.attr("JoyState");
-
-    py::tuple buttons = py::make_tuple(true, false, true);
-    py::int_ pov = py::int_(30000);
-
-    py::object js = joy_state(1, 2, 3, buttons, pov);
-    //return py::cast<joy_state>(_JoyState(1, 2, 3));
-    return js;
 }
 
 
@@ -260,10 +242,6 @@ PYBIND11_MODULE(PyForceFeedback2, m) {
     m.def("release", &release, R"pbdoc(
         Release the Joystick.
     )pbdoc");
-
-    m.def("test", &test);
-
-
 
 #ifdef VERSION_INFO
     m.attr("__version__") = VERSION_INFO;
