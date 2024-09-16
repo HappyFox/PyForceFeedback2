@@ -149,6 +149,7 @@ void init() {
 
 }
 
+
 py::object build_py_joy_state(DIJOYSTATE2 js) {
     py::object PyForceFeedback2 = py::module::import("PyForceFeedback2");
     py::object joy_state = PyForceFeedback2.attr("JoyState");
@@ -172,6 +173,14 @@ py::object build_py_joy_state(DIJOYSTATE2 js) {
     }
 
     return joy_state(js.lX, js.lY, js.lRz, js.rglSlider[0], buttons, pov);
+}
+
+
+void acquire() {
+    HRESULT hr;
+    if (FAILED(hr = g_pJoystick->Acquire())) {
+        throw std::runtime_error("Runtime error acquiring joystick.");
+    }
 }
 
 py::object poll(){
@@ -205,8 +214,6 @@ py::object poll(){
 }
 
 
-
-
 void release() {
     if (g_pJoystick)
         g_pJoystick->Unacquire();
@@ -216,6 +223,74 @@ void release() {
     SAFE_RELEASE(g_pJoystick);
     SAFE_RELEASE(g_pDI);
 }
+
+
+
+struct _ConstantForce {
+
+
+
+
+    void init(bool x_axis, bool y_axis) {
+        DWORD rgdwAxes[2] = { DIJOFS_X, DIJOFS_Y };
+        //DWORD rgdwAxes[2] = { 0,0};
+        LONG rglDirection[2] = { 0, DI_FFNOMINALMAX };
+        HRESULT hr;
+        /*
+        if (x_axis) {
+            rgdwAxes[0] = DIJOFS_X;
+        }
+        if (y_axis) {
+            rgdwAxes[1] = DIJOFS_Y;
+        }
+        */
+        this->di_cf.lMagnitude = 0;
+
+        ZeroMemory(&this->eff, sizeof(this->eff));
+
+        this->eff.dwSize = sizeof(DIEFFECT);
+        this->eff.dwFlags = DIEFF_CARTESIAN | DIEFF_OBJECTOFFSETS;
+        this->eff.dwDuration = INFINITE;
+        this->eff.dwSamplePeriod = 0;
+        this->eff.dwGain = DI_FFNOMINALMAX;
+        this->eff.dwTriggerButton = DIEB_NOTRIGGER;
+        this->eff.dwTriggerRepeatInterval = 0;
+        this->eff.cAxes = 2;
+        this->eff.rgdwAxes = rgdwAxes;
+        this->eff.rglDirection = rglDirection;
+        this->eff.lpEnvelope = 0;
+        this->eff.cbTypeSpecificParams = sizeof(DICONSTANTFORCE);
+        this->eff.lpvTypeSpecificParams = &this->di_cf;
+        this->eff.dwStartDelay = 0;
+        
+        if (FAILED(hr = g_pJoystick->CreateEffect(GUID_ConstantForce, &this->eff, &this->pdiEffect, NULL))) {
+            throw std::exception("Unable to set the Cooperative level to exclusive + background.");
+        }
+        
+
+        this->pdiEffect->Start(1, 0);
+    };
+
+    void set_magnitude(long magnitude) {
+        HRESULT hr;
+        if (!(magnitude <= DI_FFNOMINALMAX) && (magnitude >= -DI_FFNOMINALMAX)){
+            throw std::exception("Magnitude is beyond DI_FFNOMINALMAX");
+        }
+        this->di_cf.lMagnitude = magnitude;
+        hr = this->pdiEffect->SetParameters(&this->eff, DIEP_TYPESPECIFICPARAMS);
+
+
+    };
+
+    long get_magnitude() {
+        return this->di_cf.lMagnitude;
+    };
+
+    DICONSTANTFORCE di_cf;
+    DIEFFECT eff;
+    LPDIRECTINPUTEFFECT  pdiEffect;
+
+};
 
 
 PYBIND11_MODULE(PyForceFeedback2, m) {
@@ -233,11 +308,19 @@ PYBIND11_MODULE(PyForceFeedback2, m) {
                 return "<JoyState: '" + std::to_string(a.x) + ", " + std::to_string(a.y) +", " + std::to_string(a.Rz) + ", " + std::to_string(a.throttle) + ", " + py::repr(a.buttons).cast<std::string>() + "," + py::repr(a.pov).cast<std::string>() + "'>";
             });
 
+    py::class_<_ConstantForce>(m, "ConstantForce")
+        .def(py::init<>())
+        .def("init", &_ConstantForce::init)
+        .def_property("magnitude", &_ConstantForce::get_magnitude, &_ConstantForce::set_magnitude);
+
     m.def("init", &init, R"pbdoc(
         Initialize the joystick.
     )pbdoc");
     m.def("poll", &poll, R"pbdoc(
         Poll and return the axis values.
+    )pbdoc");
+    m.def("acquire", &acquire, R"pbdoc(
+        Acquire the joystick, exception on failure.
     )pbdoc");
     m.def("release", &release, R"pbdoc(
         Release the Joystick.
