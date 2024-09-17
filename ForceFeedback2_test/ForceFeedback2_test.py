@@ -71,6 +71,7 @@ async def force_feed_back():
 
         buff, _ = await loop.sock_recvfrom(svr, 1024)
 
+        vert_g, = struct.unpack("<f", buff[64:68])
         vert_g, = struct.unpack("<f", buff[68:72])
 
         if vert_g > max_val:
@@ -79,11 +80,7 @@ async def force_feed_back():
         if vert_g < min_val:
             min_val = vert_g
 
-
-        vert_g = max(-2, vert_g)
-        vert_g = min(2, vert_g)
-
-        cf.magnitude = int(vert_g * 5000)
+        cf.magnitude = max( -10000, min(10000, int(math.tanh(vert_g) * 10000)))
         print(f"{min_val:.2f}: {vert_g:.2f}: {max_val:.2f} : {cf.magnitude}")
         
 
