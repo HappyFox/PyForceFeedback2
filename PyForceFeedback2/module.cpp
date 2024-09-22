@@ -226,24 +226,17 @@ void release() {
 
 
 
-struct _ConstantForce {
 
 
-
-
-    void init(bool x_axis, bool y_axis) {
-        DWORD rgdwAxes[2] = { DIJOFS_X, DIJOFS_Y };
-        //DWORD rgdwAxes[2] = { 0,0};
-        LONG rglDirection[2] = { 0, DI_FFNOMINALMAX };
+class _ConstantForce {
+public:
+    _ConstantForce(DWORD axis) {
+        //DWORD rgdwAxes[2] = { DIJOFS_X, DIJOFS_Y };
+        //LONG rglDirection[2] = { 0, DI_FFNOMINALMAX };
         HRESULT hr;
-        /*
-        if (x_axis) {
-            rgdwAxes[0] = DIJOFS_X;
-        }
-        if (y_axis) {
-            rgdwAxes[1] = DIJOFS_Y;
-        }
-        */
+        
+                      // Axis
+        this->dwAxis = axis;
         this->di_cf.lMagnitude = 0;
 
         ZeroMemory(&this->eff, sizeof(this->eff));
@@ -255,9 +248,9 @@ struct _ConstantForce {
         this->eff.dwGain = DI_FFNOMINALMAX;
         this->eff.dwTriggerButton = DIEB_NOTRIGGER;
         this->eff.dwTriggerRepeatInterval = 0;
-        this->eff.cAxes = 2;
-        this->eff.rgdwAxes = rgdwAxes;
-        this->eff.rglDirection = rglDirection;
+        this->eff.cAxes = 1;
+        this->eff.rgdwAxes = &this->dwAxis;
+        this->eff.rglDirection = &this->lZero;
         this->eff.lpEnvelope = 0;
         this->eff.cbTypeSpecificParams = sizeof(DICONSTANTFORCE);
         this->eff.lpvTypeSpecificParams = &this->di_cf;
@@ -270,6 +263,7 @@ struct _ConstantForce {
 
         this->pdiEffect->Start(1, 0);
     };
+
 
     void set_magnitude(long magnitude) {
         HRESULT hr;
@@ -286,6 +280,9 @@ struct _ConstantForce {
         return this->di_cf.lMagnitude;
     };
 
+    LONG     lZero = 0;                       // No direction
+    DWORD    dwAxis = NULL;
+    
     DICONSTANTFORCE di_cf;
     DIEFFECT eff;
     LPDIRECTINPUTEFFECT  pdiEffect;
@@ -309,8 +306,7 @@ PYBIND11_MODULE(PyForceFeedback2, m) {
             });
 
     py::class_<_ConstantForce>(m, "ConstantForce")
-        .def(py::init<>())
-        .def("init", &_ConstantForce::init)
+        .def(py::init<const long>())
         .def_property("magnitude", &_ConstantForce::get_magnitude, &_ConstantForce::set_magnitude);
 
     m.def("init", &init, R"pbdoc(
@@ -325,6 +321,9 @@ PYBIND11_MODULE(PyForceFeedback2, m) {
     m.def("release", &release, R"pbdoc(
         Release the Joystick.
     )pbdoc");
+
+    m.attr("AXIS_X") = py::int_(DIJOFS_X);
+    m.attr("AXIS_Y") = py::int_(DIJOFS_Y);
 
 #ifdef VERSION_INFO
     m.attr("__version__") = VERSION_INFO;
