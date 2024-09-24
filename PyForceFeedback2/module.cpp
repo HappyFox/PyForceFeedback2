@@ -230,15 +230,11 @@ void release() {
 
 class _ConstantForce {
 public:
-    _ConstantForce(DWORD axis) {
+    _ConstantForce() {
         //DWORD rgdwAxes[2] = { DIJOFS_X, DIJOFS_Y };
         //LONG rglDirection[2] = { 0, DI_FFNOMINALMAX };
         HRESULT hr;
-        
-                      // Axis
-        this->dwAxis = axis;
-        this->di_cf.lMagnitude = 0;
-
+        this->di_cf.lMagnitude = 10000;
         ZeroMemory(&this->eff, sizeof(this->eff));
 
         this->eff.dwSize = sizeof(DIEFFECT);
@@ -248,9 +244,9 @@ public:
         this->eff.dwGain = DI_FFNOMINALMAX;
         this->eff.dwTriggerButton = DIEB_NOTRIGGER;
         this->eff.dwTriggerRepeatInterval = 0;
-        this->eff.cAxes = 1;
-        this->eff.rgdwAxes = &this->dwAxis;
-        this->eff.rglDirection = &this->lZero;
+        this->eff.cAxes = 2;
+        this->eff.rgdwAxes = this->rgdwAxes;
+        this->eff.rglDirection = this->rglDirection;
         this->eff.lpEnvelope = 0;
         this->eff.cbTypeSpecificParams = sizeof(DICONSTANTFORCE);
         this->eff.lpvTypeSpecificParams = &this->di_cf;
@@ -260,10 +256,32 @@ public:
             throw std::exception("Unable to set the Cooperative level to exclusive + background.");
         }
         
-
         this->pdiEffect->Start(1, 0);
     };
 
+
+    void set_direction(LONG x, LONG y) {
+        HRESULT hr;
+        
+        DICONSTANTFORCE cf;
+
+        LONG rglDirection[2] = { x, y };
+        
+        DIEFFECT eff;
+        ZeroMemory(&eff, sizeof(eff));
+        eff.dwSize = sizeof(DIEFFECT);
+        eff.dwFlags = DIEFF_CARTESIAN | DIEFF_OBJECTOFFSETS;
+        eff.cAxes = 2;
+        eff.rglDirection = rglDirection;
+        eff.lpEnvelope = 0;
+        eff.cbTypeSpecificParams = sizeof(DICONSTANTFORCE);
+        eff.lpvTypeSpecificParams = &cf;
+        eff.dwStartDelay = 0;
+        cf.lMagnitude = (DWORD)sqrt((double)x * (double)x + (double)y * (double)y);
+        hr = this->pdiEffect->SetParameters(&eff, DIEP_DIRECTION |
+            DIEP_TYPESPECIFICPARAMS |
+            DIEP_START);
+    }
 
     void set_magnitude(long magnitude) {
         HRESULT hr;
@@ -280,8 +298,8 @@ public:
         return this->di_cf.lMagnitude;
     };
 
-    LONG     lZero = 0;                       // No direction
-    DWORD    dwAxis = NULL;
+    DWORD rgdwAxes[2] = { DIJOFS_X, DIJOFS_Y };
+    LONG rglDirection[2] = { 0, 0 };
     
     DICONSTANTFORCE di_cf;
     DIEFFECT eff;
@@ -306,7 +324,10 @@ PYBIND11_MODULE(PyForceFeedback2, m) {
             });
 
     py::class_<_ConstantForce>(m, "ConstantForce")
-        .def(py::init<const long>())
+        .def(py::init<>())
+        .def("set_direction", &_ConstantForce::set_direction)
+        .def("set_magnitude", &_ConstantForce::set_magnitude)
+        .def("get_magnitude", &_ConstantForce::get_magnitude)
         .def_property("magnitude", &_ConstantForce::get_magnitude, &_ConstantForce::set_magnitude);
 
     m.def("init", &init, R"pbdoc(
@@ -324,6 +345,7 @@ PYBIND11_MODULE(PyForceFeedback2, m) {
 
     m.attr("AXIS_X") = py::int_(DIJOFS_X);
     m.attr("AXIS_Y") = py::int_(DIJOFS_Y);
+    m.attr("DI_FFNOMINALMAX") = py::int_(DI_FFNOMINALMAX);
 
 #ifdef VERSION_INFO
     m.attr("__version__") = VERSION_INFO;
