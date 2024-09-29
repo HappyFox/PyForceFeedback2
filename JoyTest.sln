@@ -3,8 +3,6 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.9.34728.123
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "JoyTest", "JoyTest\JoyTest.vcxproj", "{75445CFF-3F1E-416B-B586-71CE60613C36}"
-EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "PyForceFeedback2", "PyForceFeedback2\PyForceFeedback2.vcxproj", "{D177AA21-66C2-449D-B9FC-ED5EC10283E6}"
 EndProject
 Project("{888888A0-9F3D-457C-B088-3A5042F75D52}") = "ForceFeedback2_test", "ForceFeedback2_test\ForceFeedback2_test.pyproj", "{618555AA-7367-4AF6-BC40-840AC6B17DA5}"
@@ -19,18 +17,6 @@ Global
 		Release|x86 = Release|x86
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{75445CFF-3F1E-416B-B586-71CE60613C36}.Debug|Any CPU.ActiveCfg = Debug|x64
-		{75445CFF-3F1E-416B-B586-71CE60613C36}.Debug|Any CPU.Build.0 = Debug|x64
-		{75445CFF-3F1E-416B-B586-71CE60613C36}.Debug|x64.ActiveCfg = Debug|x64
-		{75445CFF-3F1E-416B-B586-71CE60613C36}.Debug|x64.Build.0 = Debug|x64
-		{75445CFF-3F1E-416B-B586-71CE60613C36}.Debug|x86.ActiveCfg = Debug|Win32
-		{75445CFF-3F1E-416B-B586-71CE60613C36}.Debug|x86.Build.0 = Debug|Win32
-		{75445CFF-3F1E-416B-B586-71CE60613C36}.Release|Any CPU.ActiveCfg = Release|x64
-		{75445CFF-3F1E-416B-B586-71CE60613C36}.Release|Any CPU.Build.0 = Release|x64
-		{75445CFF-3F1E-416B-B586-71CE60613C36}.Release|x64.ActiveCfg = Release|x64
-		{75445CFF-3F1E-416B-B586-71CE60613C36}.Release|x64.Build.0 = Release|x64
-		{75445CFF-3F1E-416B-B586-71CE60613C36}.Release|x86.ActiveCfg = Release|Win32
-		{75445CFF-3F1E-416B-B586-71CE60613C36}.Release|x86.Build.0 = Release|Win32
 		{D177AA21-66C2-449D-B9FC-ED5EC10283E6}.Debug|Any CPU.ActiveCfg = Debug|x64
 		{D177AA21-66C2-449D-B9FC-ED5EC10283E6}.Debug|Any CPU.Build.0 = Debug|x64
 		{D177AA21-66C2-449D-B9FC-ED5EC10283E6}.Debug|x64.ActiveCfg = Debug|x64
