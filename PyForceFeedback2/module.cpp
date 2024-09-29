@@ -40,7 +40,7 @@ extern "C" {
 
 LPDIRECTINPUT8          g_pDI = NULL;
 LPDIRECTINPUTDEVICE8    g_pJoystick = NULL; 
-LPDIRECTINPUTEFFECT     g_pEffect = NULL;
+
 HWND hwnd = nullptr;
 
 
@@ -224,7 +224,7 @@ void release() {
     }
 
     // Release any DirectInput objects.
-    SAFE_RELEASE(g_pEffect);
+    
     SAFE_RELEASE(g_pJoystick);
     SAFE_RELEASE(g_pDI);
 }
@@ -236,26 +236,32 @@ public:
         //DWORD rgdwAxes[2] = { DIJOFS_X, DIJOFS_Y };
         //LONG rglDirection[2] = { 0, DI_FFNOMINALMAX };
         HRESULT hr;
-        this->di_cf.lMagnitude = 10000;
-        ZeroMemory(&this->eff, sizeof(this->eff));
+        DWORD rgdwAxes[2] = { DIJOFS_X, DIJOFS_Y };
+        LONG rglDirection[2] = { 0, 0 };
 
-        this->eff.dwSize = sizeof(DIEFFECT);
-        this->eff.dwFlags = DIEFF_CARTESIAN | DIEFF_OBJECTOFFSETS;
-        this->eff.dwDuration = INFINITE;
-        this->eff.dwSamplePeriod = 0;
-        //this->eff.dwGain = DI_FFNOMINALMAX;
-        this->eff.dwGain = 8000;
-        this->eff.dwTriggerButton = DIEB_NOTRIGGER;
-        this->eff.dwTriggerRepeatInterval = 0;
-        this->eff.cAxes = 2;
-        this->eff.rgdwAxes = this->rgdwAxes;
-        this->eff.rglDirection = this->rglDirection;
-        this->eff.lpEnvelope = 0;
-        this->eff.cbTypeSpecificParams = sizeof(DICONSTANTFORCE);
-        this->eff.lpvTypeSpecificParams = &this->di_cf;
-        this->eff.dwStartDelay = 0;
+        DICONSTANTFORCE di_cf;
+        DIEFFECT eff;
 
-        if (FAILED(hr = g_pJoystick->CreateEffect(GUID_ConstantForce, &this->eff, &this->pdiEffect, NULL))) {
+        di_cf.lMagnitude = 10000;
+        ZeroMemory(&eff, sizeof(eff));
+
+        eff.dwSize = sizeof(DIEFFECT);
+        eff.dwFlags = DIEFF_CARTESIAN | DIEFF_OBJECTOFFSETS;
+        eff.dwDuration = INFINITE;
+        eff.dwSamplePeriod = 0;
+        //eff.dwGain = DI_FFNOMINALMAX;
+        eff.dwGain = 8000;
+        eff.dwTriggerButton = DIEB_NOTRIGGER;
+        eff.dwTriggerRepeatInterval = 0;
+        eff.cAxes = 2;
+        eff.rgdwAxes = rgdwAxes;
+        eff.rglDirection = rglDirection;
+        eff.lpEnvelope = 0;
+        eff.cbTypeSpecificParams = sizeof(DICONSTANTFORCE);
+        eff.lpvTypeSpecificParams = &di_cf;
+        eff.dwStartDelay = 0;
+
+        if (FAILED(hr = g_pJoystick->CreateEffect(GUID_ConstantForce, &eff, &this->pdiEffect, NULL))) {
             throw std::exception("Unable to set the Cooperative level to exclusive + background.");
         }
 
@@ -271,6 +277,7 @@ public:
         LONG rglDirection[2] = { x, y };
 
         DIEFFECT eff;
+
         ZeroMemory(&eff, sizeof(eff));
         eff.dwSize = sizeof(DIEFFECT);
         eff.dwFlags = DIEFF_CARTESIAN | DIEFF_OBJECTOFFSETS;
@@ -285,27 +292,7 @@ public:
             DIEP_TYPESPECIFICPARAMS |
             DIEP_START);
     }
-
-    void set_magnitude(long magnitude) {
-        HRESULT hr;
-        if (!(magnitude <= DI_FFNOMINALMAX) && (magnitude >= -DI_FFNOMINALMAX)) {
-            throw std::exception("Magnitude is beyond DI_FFNOMINALMAX");
-        }
-        this->di_cf.lMagnitude = magnitude;
-        hr = this->pdiEffect->SetParameters(&this->eff, DIEP_TYPESPECIFICPARAMS);
-
-
-    };
-
-    long get_magnitude() {
-        return this->di_cf.lMagnitude;
-    };
-
-    DWORD rgdwAxes[2] = { DIJOFS_X, DIJOFS_Y };
-    LONG rglDirection[2] = { 0, 0 };
-
-    DICONSTANTFORCE di_cf;
-    DIEFFECT eff;
+   
     LPDIRECTINPUTEFFECT  pdiEffect;
 
 };
@@ -317,30 +304,35 @@ public:
             
             HRESULT hr;
             
+            DIPERIODIC di_period;
+            DIEFFECT eff;
 
-            this->di_period.dwPeriod = DI_FFNOMINALMAX;
-            this->di_period.dwMagnitude = DI_FFNOMINALMAX;
-            this->di_period.dwPhase = 0;
-            this->di_period.lOffset = 0;
+            DWORD      dwAxes[2] = { DIJOFS_X, DIJOFS_Y };
+            LONG       lDirection[2] = { 0, 0 };
 
-            ZeroMemory(&this->eff, sizeof(this->eff));
+            di_period.dwPeriod = DI_FFNOMINALMAX;
+            di_period.dwMagnitude = DI_FFNOMINALMAX;
+            di_period.dwPhase = 0;
+            di_period.lOffset = 0;
 
-            this->eff.dwSize = sizeof(DIEFFECT);
-            this->eff.dwFlags = DIEFF_CARTESIAN | DIEFF_OBJECTOFFSETS;
-            this->eff.dwDuration = (DWORD)(0.1 * DI_SECONDS);;
-            this->eff.dwSamplePeriod = 0;
-            this->eff.dwGain = DI_FFNOMINALMAX;
-            this->eff.dwTriggerButton = DIEB_NOTRIGGER;
-            this->eff.dwTriggerRepeatInterval = 0;
-            this->eff.cAxes = 2;
-            this->eff.rgdwAxes = dwAxes;
-            this->eff.rglDirection = &lDirection[0];
-            this->eff.lpEnvelope = 0;
-            this->eff.cbTypeSpecificParams = sizeof(DIPERIODIC);
-            this->eff.lpvTypeSpecificParams = &this->di_period;
-            this->eff.dwStartDelay = 0;
+            ZeroMemory(&eff, sizeof(eff));
 
-            if (FAILED(hr = g_pJoystick->CreateEffect(GUID_Sine, &this->eff, &this->pdiEffect, NULL))) {
+            eff.dwSize = sizeof(DIEFFECT);
+            eff.dwFlags = DIEFF_CARTESIAN | DIEFF_OBJECTOFFSETS;
+            eff.dwDuration = (DWORD)(0.1 * DI_SECONDS);;
+            eff.dwSamplePeriod = 0;
+            eff.dwGain = DI_FFNOMINALMAX;
+            eff.dwTriggerButton = DIEB_NOTRIGGER;
+            eff.dwTriggerRepeatInterval = 0;
+            eff.cAxes = 2;
+            eff.rgdwAxes = dwAxes;
+            eff.rglDirection = &lDirection[0];
+            eff.lpEnvelope = 0;
+            eff.cbTypeSpecificParams = sizeof(DIPERIODIC);
+            eff.lpvTypeSpecificParams = &di_period;
+            eff.dwStartDelay = 0;
+
+            if (FAILED(hr = g_pJoystick->CreateEffect(GUID_Sine, &eff, &this->pdiEffect, NULL))) {
                 throw std::exception("Unable to set the Cooperative level to exclusive + background.");
             }
     };
@@ -349,12 +341,6 @@ public:
         HRESULT hr;
         hr = this->pdiEffect->Start(1, 0);
     };
-
-    DIPERIODIC di_period;
-    DIEFFECT eff;
-
-    DWORD      dwAxes[2] = { DIJOFS_X, DIJOFS_Y };
-    LONG       lDirection[2] = { 0, 0 };
 
     LPDIRECTINPUTEFFECT  pdiEffect;
 };
