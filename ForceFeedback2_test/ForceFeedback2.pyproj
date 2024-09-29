@@ -3,20 +3,19 @@
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>618555aa-7367-4af6-bc40-840ac6b17da5</ProjectGuid>
-    <ProjectHome>.</ProjectHome>
+    <ProjectHome>
+    </ProjectHome>
     <StartupFile>ForceFeedback2_test.py</StartupFile>
     <SearchPath>
     </SearchPath>
     <WorkingDirectory>.</WorkingDirectory>
     <OutputPath>.</OutputPath>
-    <Name>ForceFeedback2_test</Name>
+    <Name>ForceFeedback2</Name>
     <RootNamespace>ForceFeedback2_test</RootNamespace>
     <TestFramework>Pytest</TestFramework>
     <LaunchProvider>Standard Python launcher</LaunchProvider>
     <InterpreterArguments>-i</InterpreterArguments>
     <EnableNativeCodeDebugging>True</EnableNativeCodeDebugging>
-    <CommandLineArguments>
-    </CommandLineArguments>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
     <DebugSymbols>true</DebugSymbols>
