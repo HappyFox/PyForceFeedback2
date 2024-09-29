@@ -2,6 +2,7 @@
 import asyncio
 import collections
 import math
+import select
 import socket
 import struct
 
@@ -49,11 +50,8 @@ async def joy_poller(settings):
 
 async def force_feed_back(settings):
     PyForceFeedback2.acquire()
-    long_force = PyForceFeedback2.ConstantForce(PyForceFeedback2.AXIS_Y)
-    long_force.magnitude =0
-
-    lat_force = PyForceFeedback2.ConstantForce(PyForceFeedback2.AXIS_X)
-    lat_force.magnitude =0
+    x_y_force = PyForceFeedback2.ConstantForce()
+    
     
 
     svr = socket.socket(family=socket.AF_INET, type=socket.SOCK_DGRAM)
@@ -65,26 +63,19 @@ async def force_feed_back(settings):
     min_val = 100
     max_val = 0
 
-    def set_lat(val):
-        lat_force.magnitude = max( -10000, min(10000, int(math.tanh(val/1.6) * 10000)))
-
-    def set_long(val):
-        long_force.magnitude = max( -10000, min(10000, int(math.tanh(val/1.6) * 10000)))
-
-
+    
     while True:
 
         #We want the latest update, so get everything until we run out..
         buff = None    
-        keep_going = True
-        while buff is None or keep_going:
-            try:
-                buff, _ = svr.recvfrom(1024)  
-            except BlockingIOError:
-                keep_going = False
-                await asyncio.sleep(0)
-        
-        
+
+        read, _, _ = await loop.run_in_executor(None, select.select, [svr], [],[])
+        while True:
+            buff, _ = svr.recvfrom(1024) 
+            read, _, _ = await loop.run_in_executor(None, select.select, [svr], [],[], 0)
+            if not read:
+                break
+                
         late_g, long_g, vert_g = struct.unpack("<fff", buff[68:80])
        
         if vert_g > max_val:
@@ -93,16 +84,12 @@ async def force_feed_back(settings):
         if vert_g < min_val:
             min_val = vert_g
 
+        lat_dir = max( -10000, min(10000, int(math.tanh(late_g/1.6) * 10000)))
+        long_dir = max( -10000, min(10000, int(math.tanh(long_g/1.6) * 10000)))
              
-        async with asyncio.TaskGroup() as tg:
-
-            async def ex_lat(fun, g):
-                await loop.run_in_executor(None, fun, g)
-
-            task1 = tg.create_task(ex_lat(set_lat, late_g))
-            task2 = tg.create_task(ex_lat(set_long, long_g))
+        await loop.run_in_executor(None,x_y_force.set_direction, lat_dir, long_dir )
          
-        print(f"{min_val:2.2f}: {vert_g:2.2f}: {max_val:2.2f} : {long_force.magnitude} : lat: {late_g:2.2f} long:{long_g:2.2f}")
+        print(f"{min_val:2.2f}: {vert_g:2.2f}: {max_val:2.2f} : lat: {late_g:2.2f} long:{long_g:2.2f}")
         
 
     
