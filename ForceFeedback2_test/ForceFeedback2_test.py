@@ -21,7 +21,7 @@ def map_axis(val):
 pov_idx = [0, 4500, 9000, 13500, 18000, 22500, 27000, 31500]
 
 
-Settings = collections.namedtuple("Settings", ["sensitivity"])
+Settings = collections.namedtuple("Settings", ["gain"])
 
 THROTTLE_DEAD_START = int(0x4000 * 0.95)
 THROTTLE_DEAD_STOP = int(0x4000 * 1.05)
@@ -82,6 +82,7 @@ async def joy_poller(settings):
 async def force_feed_back(settings):
     PyForceFeedback2.acquire()
     x_y_force = PyForceFeedback2.ConstantForce()
+    x_y_force.set_gain(7000)
 
     loop = asyncio.get_running_loop()
     await loop.run_in_executor(None,x_y_force.set_direction, 0, 0 )
@@ -128,7 +129,7 @@ async def force_feed_back(settings):
     
 
 async def main():
-    settings = Settings(sensitivity=1000)
+    settings = Settings(gain=1000)
     async with asyncio.TaskGroup() as tg:
         task1 = tg.create_task(joy_poller(settings))
         task2 = tg.create_task(force_feed_back(settings))

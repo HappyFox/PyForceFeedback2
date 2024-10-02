@@ -12,6 +12,8 @@
 #include <dinputd.h>
 
 
+
+#include <string>
 #include <stdexcept>
 #include <tuple>
 #include <list>
@@ -23,7 +25,6 @@
 #include <pybind11/functional.h> 
 #include <pybind11/chrono.h>
 
-#define DIRECTINPUT_VERSION 0x0800
 
 
 using namespace pybind11::literals;
@@ -33,18 +34,33 @@ namespace py = pybind11;
 extern "C" {
     IMAGE_DOS_HEADER __ImageBase;
 }
-#define HINST_THISCOMPONENT ((HINSTANCE)&__ImageBase)
+
+
+HMODULE GetCurrentModuleHandle() {
+    HMODULE ImageBase;
+    if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+        (LPCWSTR)&GetCurrentModuleHandle,
+        &ImageBase)) {
+        return ImageBase;
+    }
+    return 0;
+}
+
+#define HINST_THISCOMPONENT ((HINSTANCE)&__ImageBase);
 
 #define SAFE_DELETE(p)  { if(p) { delete (p);     (p)=NULL; } }
 #define SAFE_RELEASE(p) { if(p) { (p)->Release(); (p)=NULL; } }
 
 LPDIRECTINPUT8          g_pDI = NULL;
-LPDIRECTINPUTDEVICE8    g_pJoystick = NULL; 
+LPDIRECTINPUTDEVICE8    g_pJoystick = NULL;
 
 HWND hwnd = nullptr;
 
 
 typedef std::tuple <bool, bool, bool, bool, bool, bool, bool, bool> buttons;
+
+void acquire();
+void reset_ffb();
 
 struct DI_ENUM_CONTEXT
 {
@@ -55,9 +71,9 @@ struct DI_ENUM_CONTEXT
 
 struct _JoyState {
     _JoyState(
-        const long x, 
-        const long y, 
-        const long Rz, 
+        const long x,
+        const long y,
+        const long Rz,
         const long throttle,
         py::object buttons,
         py::object pov
@@ -65,6 +81,32 @@ struct _JoyState {
     const long x, y, Rz, throttle;
     py::object buttons, pov;
 };
+
+
+//Returns the last Win32 error, in string format. Returns an empty string if there is no error.
+std::string GetLastErrorAsString()
+{
+    //Get the error message ID, if any.
+    DWORD errorMessageID = ::GetLastError();
+    if (errorMessageID == 0) {
+        return std::string(); //No error message has been recorded
+    }
+
+    LPSTR messageBuffer = nullptr;
+
+    //Ask Win32 to give us the string version of that message ID.
+    //The parameters we pass in, tell Win32 to create the buffer that holds the message for us (because we don't yet know how long the message string will be).
+    size_t size = FormatMessageA(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+        NULL, errorMessageID, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPSTR)&messageBuffer, 0, NULL);
+
+    //Copy the error message into a std::string.
+    std::string message(messageBuffer, size);
+
+    //Free the Win32's string's buffer.
+    LocalFree(messageBuffer);
+
+    return message;
+}
 
 
 BOOL CALLBACK EnumJoysticksCallback(const DIDEVICEINSTANCE* pdidInstance,
@@ -99,19 +141,22 @@ void init() {
     WNDCLASSEX wx = {};
     wx.cbSize = sizeof(WNDCLASSEX);
     wx.lpfnWndProc = DefWindowProc;
-    wx.hInstance = HINST_THISCOMPONENT;
-    wx.lpszClassName = CLASS_NAME;
+    //wx.hInstance = HINST_THISCOMPONENT;
+    wx.hInstance = GetCurrentModuleHandle();
+    wx.lpszClassName = (LPWSTR)CLASS_NAME;
 
     if (RegisterClassEx(&wx)) {
-        hwnd = CreateWindowEx(0, CLASS_NAME, L"dummy_name", 0, 0, 0, 0, 0, HWND_MESSAGE, NULL, NULL, NULL);
+        hwnd = CreateWindowEx(0, (LPWSTR)CLASS_NAME, (LPWSTR)"dummy_name", 0, 0, 0, 0, 0, HWND_MESSAGE, NULL, NULL, NULL);
     }
-    
+
     if (NULL == hwnd) {
-        throw std::exception("Unable to Start Message window");
+        std::string err_str = "Unable to Start Message window: " + GetLastErrorAsString();
+        throw std::exception(err_str.c_str());
     }
 
     if (FAILED(hr = DirectInput8Create(GetModuleHandle(NULL), 0x0800, IID_IDirectInput8, (VOID**)&g_pDI, NULL))) {
-        throw std::exception("Unable to initialize DirectX");
+        std::string err_str = "Unable to Start Message window: " + GetLastErrorAsString();
+        throw std::exception(err_str.c_str());
     }
 
     DIJOYCONFIG PreferredJoyCfg = { 0 };
@@ -121,42 +166,66 @@ void init() {
 
     IDirectInputJoyConfig8* pJoyConfig = NULL;
     if (FAILED(hr = g_pDI->QueryInterface(IID_IDirectInputJoyConfig8, (void**)&pJoyConfig))) {
-        throw std::exception("Unable to query joysticks");
+        std::string err_str = "Unable to query joysticks :" + GetLastErrorAsString();
+        throw std::exception(err_str.c_str());
     }
 
     PreferredJoyCfg.dwSize = sizeof(PreferredJoyCfg);
     if (SUCCEEDED(pJoyConfig->GetConfig(0, &PreferredJoyCfg, DIJC_GUIDINSTANCE))) // This function is expected to fail if no joystick is attached
         enumContext.bPreferredJoyCfgValid = true;
-    else
-        throw std::exception("Unable to get Joystick config");
-
+    else {
+        std::string err_str = "Unable to get Joystick config : " + GetLastErrorAsString();
+        throw std::exception(err_str.c_str());
+    }
     SAFE_RELEASE(pJoyConfig);
 
     if (FAILED(hr = g_pDI->EnumDevices(DI8DEVCLASS_GAMECTRL, EnumJoysticksCallback, &enumContext, DIEDFL_ATTACHEDONLY | DIEDFL_FORCEFEEDBACK))) {
-        throw std::exception("Unable to find a joystick with force feedback.");
+        std::string err_str = "Unable to find a joystick with force feedback: " + GetLastErrorAsString();
+        throw std::exception(err_str.c_str());
     }
 
-    if (NULL == g_pJoystick)
-    {
-        throw std::exception("Unable to find a joystick with force feedback.");
+    if (NULL == g_pJoystick) {
+        std::string err_str = "Unable to find a joystick with force feedback: " + GetLastErrorAsString();
+        throw std::exception(err_str.c_str());
     }
-    
+
     if (FAILED(hr = g_pJoystick->SetDataFormat(&c_dfDIJoystick2))) {
-        throw std::exception("Unable to set the data format");
+        std::string err_str = "Unable to find a joystick with force feedback: " + GetLastErrorAsString();
+        throw std::exception(err_str.c_str());
     }
     if (FAILED(hr = g_pJoystick->SetCooperativeLevel(hwnd, DISCL_EXCLUSIVE | DISCL_BACKGROUND))) {
-        throw std::exception("Unable to set the Cooperative level to exclusive + background.");
+        std::string err_str = "Unable to set the Cooperative level to exclusive + background. :" + GetLastErrorAsString();
+        throw std::exception(err_str.c_str());
     }
 
+    acquire();
+    reset_ffb();
 }
-
 
 
 
 void acquire() {
     HRESULT hr;
+    if (NULL == g_pJoystick) {
+        throw std::exception("Not initialized.");
+    }
+
     if (FAILED(hr = g_pJoystick->Acquire())) {
-        throw std::runtime_error("Runtime error acquiring joystick.");
+        std::string err_str = "Runtime error acquiring joystick. : " + GetLastErrorAsString();
+        throw std::exception(err_str.c_str());
+    }
+}
+
+void reset_ffb() {
+    HRESULT hr;
+
+    if (NULL == g_pJoystick) {
+        throw std::exception("Not initialized.");
+    }
+
+    if (FAILED(hr = g_pJoystick->SendForceFeedbackCommand(DISFFC_RESET))) {
+        std::string err_str = "Unable to reset the joystick :" + GetLastErrorAsString();
+        throw std::exception(err_str.c_str());
     }
 }
 
@@ -186,7 +255,7 @@ py::object build_py_joy_state(DIJOYSTATE2 js) {
 }
 
 
-py::object poll(){
+py::object poll() {
     HRESULT hr;
     DIJOYSTATE2 js;
 
@@ -224,7 +293,7 @@ void release() {
     }
 
     // Release any DirectInput objects.
-    
+
     SAFE_RELEASE(g_pJoystick);
     SAFE_RELEASE(g_pDI);
 }
@@ -233,8 +302,6 @@ void release() {
 class _ConstantForce {
 public:
     _ConstantForce() {
-        //DWORD rgdwAxes[2] = { DIJOFS_X, DIJOFS_Y };
-        //LONG rglDirection[2] = { 0, DI_FFNOMINALMAX };
         HRESULT hr;
         DWORD rgdwAxes[2] = { DIJOFS_X, DIJOFS_Y };
         LONG rglDirection[2] = { 0, 0 };
@@ -242,15 +309,14 @@ public:
         DICONSTANTFORCE di_cf;
         DIEFFECT eff;
 
-        di_cf.lMagnitude = 10000;
+        di_cf.lMagnitude = 0;
         ZeroMemory(&eff, sizeof(eff));
 
         eff.dwSize = sizeof(DIEFFECT);
         eff.dwFlags = DIEFF_CARTESIAN | DIEFF_OBJECTOFFSETS;
         eff.dwDuration = INFINITE;
         eff.dwSamplePeriod = 0;
-        //eff.dwGain = DI_FFNOMINALMAX;
-        eff.dwGain = 8000;
+        eff.dwGain = DI_FFNOMINALMAX;
         eff.dwTriggerButton = DIEB_NOTRIGGER;
         eff.dwTriggerRepeatInterval = 0;
         eff.cAxes = 2;
@@ -262,11 +328,17 @@ public:
         eff.dwStartDelay = 0;
 
         if (FAILED(hr = g_pJoystick->CreateEffect(GUID_ConstantForce, &eff, &this->pdiEffect, NULL))) {
-            throw std::exception("Unable to set the Cooperative level to exclusive + background.");
+            std::string err_str = "Unable to set the Cooperative level to exclusive + background. :" + GetLastErrorAsString();
+            throw std::exception(err_str.c_str());
         }
 
         this->pdiEffect->Start(1, 0);
     };
+
+    ~_ConstantForce() {
+        // Yes,  I am going to ignore any errors, this is best effort at this point.
+        this->pdiEffect->Unload();
+    }
 
 
     void set_direction(LONG x, LONG y) {
@@ -278,6 +350,17 @@ public:
 
         DIEFFECT eff;
 
+
+        if (DI_FFNOMINALMAX < x || -DI_FFNOMINALMAX > x) {
+            std::string err_str = "X of " + std::to_string(x) + "is out of range 10000 to - 10000";
+            throw std::exception(err_str.c_str());
+        };
+
+        if (DI_FFNOMINALMAX < y || -DI_FFNOMINALMAX > y) {
+            std::string err_str = "Y of " + std::to_string(y) + " is out of range 10000 to - 10000";
+            throw std::exception(err_str.c_str());
+        };
+
         ZeroMemory(&eff, sizeof(eff));
         eff.dwSize = sizeof(DIEFFECT);
         eff.dwFlags = DIEFF_CARTESIAN | DIEFF_OBJECTOFFSETS;
@@ -288,11 +371,33 @@ public:
         eff.lpvTypeSpecificParams = &cf;
         eff.dwStartDelay = 0;
         cf.lMagnitude = (DWORD)sqrt((double)x * (double)x + (double)y * (double)y);
-        hr = this->pdiEffect->SetParameters(&eff, DIEP_DIRECTION |
+        if (FAILED(hr = this->pdiEffect->SetParameters(&eff, DIEP_DIRECTION |
             DIEP_TYPESPECIFICPARAMS |
-            DIEP_START);
+            DIEP_START))) {
+            std::string err_str = "Unable to set the parameters on effect : " + GetLastErrorAsString();
+            throw std::exception(err_str.c_str());
+        }
     }
-   
+
+    void set_gain(DWORD gain) {
+        HRESULT hr;
+
+        DIEFFECT eff;
+
+        if (DI_FFNOMINALMAX < gain || 0 > gain) {
+            std::string err_str = "Gain of " + std::to_string(gain) + " is out of range 10000 to 0";
+            throw std::exception(err_str.c_str());
+        };
+
+        ZeroMemory(&eff, sizeof(eff));
+        eff.dwSize = sizeof(DIEFFECT);
+        eff.dwGain = gain;
+        if (FAILED(hr = this->pdiEffect->SetParameters(&eff, DIEP_GAIN | DIEP_START))) {
+            std::string err_str = "Unable to set the gain on effect : " + GetLastErrorAsString();
+            throw std::exception(err_str.c_str());
+        }
+    }
+
     LPDIRECTINPUTEFFECT  pdiEffect;
 
 };
@@ -301,45 +406,54 @@ public:
 class _BuzzForce {
 public:
     _BuzzForce() {
-            
-            HRESULT hr;
-            
-            DIPERIODIC di_period;
-            DIEFFECT eff;
 
-            DWORD      dwAxes[2] = { DIJOFS_X, DIJOFS_Y };
-            LONG       lDirection[2] = { 0, 0 };
+        HRESULT hr;
 
-            di_period.dwPeriod = DI_FFNOMINALMAX;
-            di_period.dwMagnitude = DI_FFNOMINALMAX;
-            di_period.dwPhase = 0;
-            di_period.lOffset = 0;
+        DIPERIODIC di_period;
+        DIEFFECT eff;
 
-            ZeroMemory(&eff, sizeof(eff));
+        DWORD      dwAxes[2] = { DIJOFS_X, DIJOFS_Y };
+        LONG       lDirection[2] = { 1000, 1000 };
 
-            eff.dwSize = sizeof(DIEFFECT);
-            eff.dwFlags = DIEFF_CARTESIAN | DIEFF_OBJECTOFFSETS;
-            eff.dwDuration = (DWORD)(0.1 * DI_SECONDS);;
-            eff.dwSamplePeriod = 0;
-            eff.dwGain = DI_FFNOMINALMAX;
-            eff.dwTriggerButton = DIEB_NOTRIGGER;
-            eff.dwTriggerRepeatInterval = 0;
-            eff.cAxes = 2;
-            eff.rgdwAxes = dwAxes;
-            eff.rglDirection = &lDirection[0];
-            eff.lpEnvelope = 0;
-            eff.cbTypeSpecificParams = sizeof(DIPERIODIC);
-            eff.lpvTypeSpecificParams = &di_period;
-            eff.dwStartDelay = 0;
+        di_period.dwPeriod = DI_FFNOMINALMAX;
+        di_period.dwMagnitude = DI_FFNOMINALMAX;
+        di_period.dwPhase = 0;
+        di_period.lOffset = 0;
 
-            if (FAILED(hr = g_pJoystick->CreateEffect(GUID_Sine, &eff, &this->pdiEffect, NULL))) {
-                throw std::exception("Unable to set the Cooperative level to exclusive + background.");
-            }
+        ZeroMemory(&eff, sizeof(eff));
+
+        eff.dwSize = sizeof(DIEFFECT);
+        eff.dwFlags = DIEFF_CARTESIAN | DIEFF_OBJECTOFFSETS;
+        eff.dwDuration = (DWORD)(0.1 * DI_SECONDS);;
+        eff.dwSamplePeriod = 0;
+        eff.dwGain = DI_FFNOMINALMAX;
+        eff.dwTriggerButton = DIEB_NOTRIGGER;
+        eff.dwTriggerRepeatInterval = 0;
+        eff.cAxes = 2;
+        eff.rgdwAxes = dwAxes;
+        eff.rglDirection = &lDirection[0];
+        eff.lpEnvelope = 0;
+        eff.cbTypeSpecificParams = sizeof(DIPERIODIC);
+        eff.lpvTypeSpecificParams = &di_period;
+        eff.dwStartDelay = 0;
+
+        if (FAILED(hr = g_pJoystick->CreateEffect(GUID_Sine, &eff, &this->pdiEffect, NULL))) {
+            std::string err_str = "Unable to create an effect : " + GetLastErrorAsString();
+            throw std::exception(err_str.c_str());
+        }
     };
+
+    ~_BuzzForce() {
+        // Yes,  I am going to ignore any errors, this is best effort at this point.
+        this->pdiEffect->Unload();
+    }
 
     void start() {
         HRESULT hr;
-        hr = this->pdiEffect->Start(1, 0);
+        if (FAILED(hr = this->pdiEffect->Start(1, 0))) {
+            std::string err_str = "Unable to start the buzz effect : " + GetLastErrorAsString();
+            throw std::exception(err_str.c_str());
+        };
     };
 
     LPDIRECTINPUTEFFECT  pdiEffect;
@@ -358,12 +472,13 @@ PYBIND11_MODULE(PyForceFeedback2, m) {
         .def("__repr__",
             [](const _JoyState& a) {
 
-                return "<JoyState: '" + std::to_string(a.x) + ", " + std::to_string(a.y) +", " + std::to_string(a.Rz) + ", " + std::to_string(a.throttle) + ", " + py::repr(a.buttons).cast<std::string>() + "," + py::repr(a.pov).cast<std::string>() + "'>";
+                return "<JoyState: '" + std::to_string(a.x) + ", " + std::to_string(a.y) + ", " + std::to_string(a.Rz) + ", " + std::to_string(a.throttle) + ", " + py::repr(a.buttons).cast<std::string>() + "," + py::repr(a.pov).cast<std::string>() + "'>";
             });
 
     py::class_<_ConstantForce>(m, "ConstantForce")
         .def(py::init<>())
-        .def("set_direction", &_ConstantForce::set_direction);
+        .def("set_direction", &_ConstantForce::set_direction)
+        .def("set_gain", &_ConstantForce::set_gain);
 
     py::class_<_BuzzForce>(m, "BuzzForce")
         .def(py::init<>())
@@ -380,6 +495,10 @@ PYBIND11_MODULE(PyForceFeedback2, m) {
     )pbdoc");
     m.def("release", &release, R"pbdoc(
         Release the Joystick.
+    )pbdoc");
+
+    m.def("reset", &reset_ffb, R"pbdoc(
+        Reset the force feedback system.
     )pbdoc");
 
     m.attr("AXIS_X") = py::int_(DIJOFS_X);
